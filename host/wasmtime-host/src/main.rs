@@ -1,14 +1,17 @@
-//! wasmux wasmtime host: boots vmlinux.wasm under wasmtime.
+//! wasmux wasmtime host: boots vmlinux.wasm under wasmtime and drives the
+//! kernel-resident shell.
 //!
 //! The kernel imports the wasmux host ABI (console, clock, timer, random,
-//! exit) from module "wasmux" and exports start_kernel.  This host
-//! provides those imports and calls start_kernel, printing the kernel
-//! console to stdout.
+//! exit, shell input) from module "wasmux" and exports start_kernel plus
+//! the shell input functions.  This host provides the imports, calls
+//! start_kernel, and answers the kernel's blocking wasm_shell_wait()
+//! import by reading lines from stdin (echo disabled, so the kernel's own
+//! line echo shows).
 //!
 //! Usage: cargo run --release -- [path/to/vmlinux.wasm]
 
 use std::io::Write;
-use wasmtime::{Caller, Engine, Linker, Module, Store};
+use wasmtime::{Caller, Config, Engine, Linker, Module, Store};
 
 struct Host {
     t0: std::time::Instant,
@@ -18,9 +21,27 @@ fn exit_kernel(code: i32) {
     std::process::exit(code);
 }
 
+/// Read one line from stdin (canonical mode: the terminal echoes as the
+/// user types); returns the line including the trailing newline, or None
+/// on EOF.
+fn read_line_no_echo(buf: &mut Vec<u8>) -> Option<usize> {
+    let mut line = String::new();
+    use std::io::BufRead;
+    let n = std::io::stdin().lock().read_line(&mut line).ok()?;
+    if n == 0 {
+        return None;
+    }
+    buf.clear();
+    buf.extend_from_slice(line.as_bytes());
+    Some(buf.len())
+}
+
 fn main() -> wasmtime::Result<()> {
     let path = std::env::args().nth(1).unwrap_or_else(|| "vmlinux.wasm".into());
-    let engine = Engine::default();
+    let mut config = Config::new();
+    // The kernel's shell blocks inside wasm_shell_wait() while waiting for
+    // input, so no epoch-based hang detection is needed.
+    let engine = Engine::new(&config)?;
     let module = Module::from_file(&engine, &path)?;
 
     let mut store = Store::new(&engine, Host {
@@ -41,6 +62,7 @@ fn main() -> wasmtime::Result<()> {
             let start = ptr as usize;
             let end = start + len as usize;
             std::io::stdout().write_all(&data[start.min(data.len())..end.min(data.len())]).ok();
+            std::io::stdout().flush().ok();
         },
     )?;
 
@@ -48,9 +70,13 @@ fn main() -> wasmtime::Result<()> {
         caller.data().t0.elapsed().as_nanos() as i64
     })?;
 
+    linker.func_wrap("wasmux", "wasm_time_ms", |caller: Caller<'_, Host>| -> i64 {
+        caller.data().t0.elapsed().as_millis() as i64
+    })?;
+
     linker.func_wrap("wasmux", "wasm_timer_arm", |_: Caller<'_, Host>, _ns: i64| {
-        // one-shot timer; the cooperative kernel is driven by start_kernel
-        // running to completion, so no host timer is needed yet
+        // One-shot timer; the cooperative kernel is driven by start_kernel
+        // running to completion, so no host timer is needed yet.
     })?;
 
     linker.func_wrap(
@@ -74,6 +100,26 @@ fn main() -> wasmtime::Result<()> {
         exit_kernel(code);
     })?;
 
+    linker.func_wrap(
+        "wasmux",
+        "wasm_shell_wait",
+        |mut caller: Caller<'_, Host>, ptr: i32, max_len: i32| -> i32 {
+            let mem = caller
+                .get_export("memory")
+                .and_then(|e| e.into_memory())
+                .expect("vmlinux.wasm must export memory");
+            let mut line = Vec::new();
+            match read_line_no_echo(&mut line) {
+                Some(n) => {
+                    let n = n.min(max_len as usize);
+                    mem.write(&mut caller, ptr as usize, &line[..n]).ok();
+                    n as i32
+                }
+                None => -1, // EOF: the kernel treats this as exit
+            }
+        },
+    )?;
+
     let instance = linker.instantiate(&mut store, &module)?;
     let start = instance.get_typed_func::<(), ()>(&mut store, "start_kernel")?;
 
@@ -82,9 +128,6 @@ fn main() -> wasmtime::Result<()> {
         Err(e) => {
             println!("\n[wasmux] kernel trapped: {e}");
             println!("[wasmux] error debug: {e:?}");
-            if let Some(trap) = e.downcast_ref::<wasmtime::Trap>() {
-                println!("[wasmux] trap code: {:?}", trap.trap_code());
-            }
         }
     }
     Ok(())

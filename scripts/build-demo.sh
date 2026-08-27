@@ -15,7 +15,9 @@ bun build webui/src/main.ts --outdir "$OUT" --target browser --minify
 bun build webui/src/worker.ts --outdir "$OUT" --format esm --target browser \
   --entry-naming worker.js
 cp webui/public/index.html "$OUT/index.html"
-cp vmlinux.wasm "$OUT/vmlinux.wasm"
+# The kernel must be patched before it runs (see scripts/patch-wasm.ts);
+# ship the patched module so the static demo needs no post-processing.
+bun scripts/patch-wasm.ts vmlinux.wasm "$OUT/vmlinux.wasm"
 touch "$OUT/.nojekyll"
 
 # The dev server transpiles /src/*.ts on the fly; the static build uses

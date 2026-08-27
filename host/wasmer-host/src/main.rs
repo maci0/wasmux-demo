@@ -109,6 +109,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
+    let shell_wait = Function::new_with_env(
+        &mut store,
+        &env,
+        FunctionType::new(vec![Type::I32, Type::I32], vec![Type::I32]),
+        |mut env: FunctionEnvMut<Env>, args: &[Value]| -> Result<Vec<Value>, wasmer::RuntimeError> {
+            let ptr = args[0].i32().unwrap_or(0) as u64;
+            let max_len = args[1].i32().unwrap_or(0) as usize;
+            // Block until a line arrives (canonical mode: the terminal
+            // echoes as the user types); pass the newline through so the
+            // kernel's line processing triggers.
+            use std::io::BufRead;
+            let mut line = String::new();
+            let n = std::io::stdin().lock().read_line(&mut line).unwrap_or(0);
+            if n == 0 {
+                return Ok(vec![Value::I32(-1)]); // EOF: kernel exits
+            }
+            let bytes = line.as_bytes();
+            let n = bytes.len().min(max_len);
+            if let Some(mem) = env.data().memory.lock().unwrap().as_ref() {
+                mem.view(&env).write(ptr, &bytes[..n]).ok();
+            }
+            Ok(vec![Value::I32(n as i32)])
+        },
+    );
+
     let import_object = wasmer::imports! {
         "wasmux" => {
             "wasm_console_write" => console_write,
@@ -116,6 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "wasm_timer_arm" => timer_arm,
             "wasm_random" => random,
             "wasm_exit" => exit,
+            "wasm_shell_wait" => shell_wait,
         },
     };
 

@@ -1,18 +1,21 @@
 /**
- * wasmux main: boots Linux (vmlinux.wasm) into its initramfs and shows the
- * kernel console.  Network frames are bridged over WebSocket when the local
- * bridge is reachable; without it the kernel simply runs without ethernet.
+ * wasmux main: boots Linux (vmlinux.wasm) into its kernel-resident shell
+ * and shows the terminal.  The kernel runs in a Web Worker (fault
+ * isolation); console output streams back, input lines are forwarded.
+ * Network frames are bridged over WebSocket when the local bridge is
+ * reachable; without it the kernel simply runs without ethernet.
  */
 import { Console } from "./console.ts";
 
 const out = document.getElementById("out")!;
 const status = document.getElementById("status")!;
 
-//, console ----------------------------------------------------------------
+// --- console ----------------------------------------------------------------
 
-const term = new Console(out, () => {});
+let kernel: { sendInput(line: string): void } | null = null;
+const term = new Console(out, (line) => kernel?.sendInput(line));
 
-//, kernel runs in a Web Worker so a kernel fault cannot kill the page ---
+// --- kernel worker ----------------------------------------------------------
 
 let worker: Worker | null = null;
 
@@ -22,14 +25,17 @@ function spawnKernelWorker(bytes: ArrayBuffer): Promise<void> {
     worker.onmessage = (ev: MessageEvent) => {
       const m = ev.data;
       if (m.type === "console") term.print(m.text);
-      else if (m.type === "exit") {
+      else if (m.type === "shell") {
+        status.textContent = "shell ready — type commands";
+        resolve();
+      } else if (m.type === "exit") {
         term.print(`\n[wasmux: kernel exited with code ${m.code}]\n`);
         status.textContent = `kernel exited (${m.code})`;
       } else if (m.type === "trap") {
         term.print(`\n[kernel fault: ${m.error}]\n`);
         status.textContent = "kernel faulted (page kept alive by worker)";
+        resolve();
       }
-      resolve();
     };
     worker.onerror = (e) => {
       status.textContent = "kernel worker crashed";
@@ -37,10 +43,15 @@ function spawnKernelWorker(bytes: ArrayBuffer): Promise<void> {
       reject(new Error("worker crashed"));
     };
     worker.postMessage({ type: "boot", bytes }, [bytes]);
+    kernel = {
+      sendInput(line: string) {
+        worker?.postMessage({ type: "input", line });
+      },
+    };
   });
 }
 
-//, boot -------------------------------------------------------------------
+// --- boot -------------------------------------------------------------------
 
 async function main() {
   status.textContent = "loading vmlinux.wasm…";

@@ -152,19 +152,24 @@ async function main() {
   // content pointers: 4-byte LE words anywhere in the module's data that
   // point into the moved range.  A pointer whose target is zero-initialized
   // (bss) must keep its old address; only non-zero (initialized) targets move.
-  const segContent = (addr: number): Uint8Array | null => {
+  // A target is only treated as bss when 16 bytes at the address are all
+  // zero: a 4-byte window misclassifies live structures whose leading
+  // members are NULL/zero (the idle sched_class starts with queue_mask=0 and
+  // enqueue_task=NULL, and its first non-zero member sits at +8).
+  const segByte = (addr: number): number => {
     for (const s of allSegs) {
       const size = s.contentEnd - s.contentStart;
-      if (addr >= s.off && addr + 4 <= s.off + size) {
-        const o = addr - s.off;
-        return orig.subarray(s.contentStart + o, s.contentStart + o + 4);
+      if (addr >= s.off && addr < s.off + size) {
+        return orig[s.contentStart + (addr - s.off)];
       }
     }
-    return null; // in a gap: memory stays zero, treat as bss
+    return 0; // in a gap: memory stays zero, treat as bss
   };
   const isZeroAt = (addr: number): boolean => {
-    const c = segContent(addr);
-    return !c || (c[0] === 0 && c[1] === 0 && c[2] === 0 && c[3] === 0);
+    for (let k = 0; k < 16; k++) {
+      if (segByte(addr + k) !== 0) return false;
+    }
+    return true;
   };
 
   for (const s of allSegs) {
