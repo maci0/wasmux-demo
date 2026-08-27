@@ -132,8 +132,8 @@ cd host/wasmer-host && cargo run --release -- ../../vmlinux.wasm
 ## The fork
 
 - `torvalds/linux` v6.19 + two commits:
-  - [`arch: add the wasm (WebAssembly) architecture port`](https://github.com/maci0/linux-wasm/commit/5e4eb51af)
-  - [`kernel: make core code build with wasm-ld and zig cc`](https://github.com/maci0/linux-wasm/commit/b2603861f)
+  - [`arch: add the wasm (WebAssembly) architecture port`](https://github.com/maci0/linux-wasm/commit/4d0abdd82)
+  - [`kernel: make core code build with wasm-ld and zig cc`](https://github.com/maci0/linux-wasm/commit/64dcabcfe)
 - Branch: `wasm`
 - Defconfig: `arch/wasm/configs/wasm_defconfig` (run `make ARCH=wasm
   wasm_defconfig`).
