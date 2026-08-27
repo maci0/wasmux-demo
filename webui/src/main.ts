@@ -1,7 +1,7 @@
 /**
  * wasmux main: boots Linux (vmlinux.wasm) into its kernel-resident shell
  * and shows the terminal.  The kernel runs in a Web Worker (fault
- * isolation); console output streams back, input lines are forwarded.
+ * * isolation); console output streams back, raw keystrokes are forwarded.
  * Network frames are bridged over WebSocket when the local bridge is
  * reachable; without it the kernel simply runs without ethernet.
  */
@@ -12,8 +12,8 @@ const status = document.getElementById("status")!;
 
 // --- console ----------------------------------------------------------------
 
-let kernel: { sendInput(line: string): void } | null = null;
-const term = new Console(out, (line) => kernel?.sendInput(line));
+let kernel: { sendInput(key: string): void } | null = null;
+const term = new Console(out, (key) => kernel?.sendInput(key));
 
 // --- kernel worker ----------------------------------------------------------
 
@@ -44,8 +44,8 @@ function spawnKernelWorker(bytes: ArrayBuffer): Promise<void> {
     };
     worker.postMessage({ type: "boot", bytes }, [bytes]);
     kernel = {
-      sendInput(line: string) {
-        worker?.postMessage({ type: "input", line });
+      sendInput(key: string) {
+        worker?.postMessage({ type: "input", key });
       },
     };
   });

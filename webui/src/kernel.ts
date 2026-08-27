@@ -83,13 +83,15 @@ export class LinuxKernel {
     (this.exports.start_kernel as Function)();
   }
 
-  /** Send one command line to the kernel-resident shell. */
-  sendInput(line: string): void {
+  /** Forward raw input bytes to the kernel-resident shell (the kernel
+   *  echoes and does line editing).  Lines end with "\n"; backspace is
+   *  "\x7f". */
+  sendInput(data: string): void {
     if (this.entered && this.exports.wasm_shell_input) {
       const scratch = (this.exports.wasm_shell_scratch as Function)() as number;
-      const data = new TextEncoder().encode(line + "\n");
-      const n = Math.min(data.length, SHELL_SCRATCH - 1);
-      this.bytes().set(data.subarray(0, n), scratch);
+      const bytes = new TextEncoder().encode(data);
+      const n = Math.min(bytes.length, SHELL_SCRATCH - 1);
+      this.bytes().set(bytes.subarray(0, n), scratch);
       (this.exports.wasm_shell_input as Function)(scratch, n);
     }
   }

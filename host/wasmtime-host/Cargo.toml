@@ -6,3 +6,4 @@ description = "Run vmlinux.wasm (Linux 6.19 on wasm32) under wasmtime"
 
 [dependencies]
 wasmtime = "48"
+libc = "0.2"

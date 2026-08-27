@@ -6,11 +6,11 @@
  *
  * The kernel boots to its resident shell: the shell's wasm_shell_wait
  * import throws ShellWait, the worker catches it and tells the main
- * thread "shell ready".  From then on the main thread sends input lines
+ * thread "shell ready". * From then on the main thread forwards raw keystrokes
  * that are staged in the kernel's scratch buffer and passed to the
  * exported wasm_shell_input.
  *
- * Messages in:  { type: "boot", bytes } | { type: "input", line }
+ * Messages in:  { type: "boot", bytes } | { type: "input", key }
  * Messages out: { type: "console", text }
  *               { type: "exit", code }
  *               { type: "trap", error }
@@ -45,6 +45,6 @@ self.onmessage = async (ev: MessageEvent) => {
       }
     }
   } else if (m.type === "input") {
-    kernel.sendInput(m.line as string);
+    kernel.sendInput(m.key as string);
   }
 };

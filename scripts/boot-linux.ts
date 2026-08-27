@@ -35,7 +35,7 @@ try {
     // shell is up: drive the scripted session
     for (const line of SCRIPT.split("\n")) {
       if (!line) continue;
-      kernel.sendInput(line);
+      kernel.sendInput(line + "\n");
     }
     console.log(`\n[wasmux] shell session done after ${(performance.now() - t0).toFixed(0)}ms`);
     process.exit(0);

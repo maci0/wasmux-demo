@@ -17,11 +17,12 @@ export class Console {
   private buffer: string[] = [];
   private cursor = { r: 0, c: 0 };
   private scrollback = 0;
-  private inputBuffer = "";
-  private onInput: (line: string) => void;
+  /** Forwarded to the kernel: "\n" on Enter, "\x7f" on Backspace,
+   *  otherwise the printable character.  The kernel owns the echo. */
+  private onKey: (key: string) => void;
 
-  constructor(parent: HTMLElement, onInput: (line: string) => void) {
-    this.onInput = onInput;
+  constructor(parent: HTMLElement, onKey: (key: string) => void) {
+    this.onKey = onKey;
     this.canvas = document.createElement("canvas");
     this.canvas.style.cssText = "background:#1a1a2e;color:#e0e0e0;font-family:monospace;display:block;";
     this.ctx = this.canvas.getContext("2d")!;
@@ -44,22 +45,18 @@ export class Console {
   private bindKeys() {
     window.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
-        this.onInput(this.inputBuffer);
-        this.inputBuffer = "";
+        e.preventDefault();
+        this.onKey("\n");
         return;
       }
       if (e.key === "Backspace") {
-        if (this.inputBuffer.length) {
-          this.inputBuffer = this.inputBuffer.slice(0, -1);
-          this.redraw();
-        }
         e.preventDefault();
+        this.onKey("\x7f");
         return;
       }
       if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-        this.inputBuffer += e.key;
-        this.print(e.key);
         e.preventDefault();
+        this.onKey(e.key);
       }
     });
   }
@@ -89,10 +86,20 @@ export class Console {
       }
       if (ch === "\n") this.newLine();
       else if (ch === "\r") this.cursor.c = 0;
+      else if (ch === "\b") this.backspace();
       else this.putChar(ch);
       i++;
     }
     this.redraw();
+  }
+
+  /** Erase the character left of the cursor (kernel backspace echo). */
+  private backspace() {
+    if (this.cursor.c > 0) {
+      this.cursor.c--;
+      const line = this.buffer[this.cursor.r] ?? "";
+      this.buffer[this.cursor.r] = line.slice(0, this.cursor.c) + " " + line.slice(this.cursor.c + 1);
+    }
   }
 
   private clearScreen() {

@@ -10,7 +10,7 @@
 //!
 //! Usage: cargo run --release -- [path/to/vmlinux.wasm]
 
-use std::io::Write;
+use std::io::{Read, Write};
 use wasmtime::{Caller, Config, Engine, Linker, Module, Store};
 
 struct Host {
@@ -21,19 +21,46 @@ fn exit_kernel(code: i32) {
     std::process::exit(code);
 }
 
-/// Read one line from stdin (canonical mode: the terminal echoes as the
-/// user types); returns the line including the trailing newline, or None
-/// on EOF.
-fn read_line_no_echo(buf: &mut Vec<u8>) -> Option<usize> {
-    let mut line = String::new();
-    use std::io::BufRead;
-    let n = std::io::stdin().lock().read_line(&mut line).ok()?;
-    if n == 0 {
-        return None;
+/// Put stdin into raw mode (no echo, no canonical line buffering) so the
+/// kernel's shell sees each keystroke and does its own echo + line
+/// editing.  Returns the previous termios to restore on exit.
+fn stdin_raw() -> Option<libc::termios> {
+    use std::os::fd::AsRawFd;
+    let fd = std::io::stdin().as_raw_fd();
+    if unsafe { libc::isatty(fd) } != 1 {
+        return None; // piped input: termios is irrelevant
     }
-    buf.clear();
-    buf.extend_from_slice(line.as_bytes());
-    Some(buf.len())
+    unsafe {
+        let mut t: libc::termios = std::mem::zeroed();
+        if libc::tcgetattr(fd, &mut t) != 0 {
+            return None;
+        }
+        let orig = t;
+        t.c_lflag &= !(libc::ICANON | libc::ECHO);
+        t.c_cc[libc::VMIN] = 1;
+        t.c_cc[libc::VTIME] = 0;
+        libc::tcsetattr(fd, libc::TCSANOW, &t);
+        Some(orig)
+    }
+}
+
+fn stdin_restore(orig: Option<libc::termios>) {
+    if let Some(t) = orig {
+        use std::os::fd::AsRawFd;
+        unsafe {
+            libc::tcsetattr(std::io::stdin().as_raw_fd(), libc::TCSANOW, &t);
+        }
+    }
+}
+
+/// Read one raw byte from stdin (blocking); returns None on EOF.
+fn read_raw_byte() -> Option<u8> {
+    let mut byte = [0u8; 1];
+    match std::io::stdin().read(&mut byte) {
+        Ok(0) => None,
+        Ok(_) => Some(byte[0]),
+        Err(_) => None,
+    }
 }
 
 fn main() -> wasmtime::Result<()> {
@@ -108,17 +135,24 @@ fn main() -> wasmtime::Result<()> {
                 .get_export("memory")
                 .and_then(|e| e.into_memory())
                 .expect("vmlinux.wasm must export memory");
-            let mut line = Vec::new();
-            match read_line_no_echo(&mut line) {
-                Some(n) => {
-                    let n = n.min(max_len as usize);
-                    mem.write(&mut caller, ptr as usize, &line[..n]).ok();
-                    n as i32
+            // One raw byte at a time: the kernel's shell echoes and does
+            // the line editing, so the host only forwards keystrokes.
+            match read_raw_byte() {
+                Some(b) => {
+                    if max_len >= 1 {
+                        mem.write(&mut caller, ptr as usize, &[b]).ok();
+                        1
+                    } else {
+                        0
+                    }
                 }
                 None => -1, // EOF: the kernel treats this as exit
             }
         },
     )?;
+
+    // raw mode for interactive sessions
+    let orig_termios = stdin_raw();
 
     let instance = linker.instantiate(&mut store, &module)?;
     let start = instance.get_typed_func::<(), ()>(&mut store, "start_kernel")?;
@@ -128,6 +162,7 @@ fn main() -> wasmtime::Result<()> {
         Err(e) => {
             println!("\n[wasmux] kernel trapped: {e}");
             println!("[wasmux] error debug: {e:?}");
+            stdin_restore(orig_termios);
         }
     }
     Ok(())

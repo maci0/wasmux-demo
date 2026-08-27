@@ -115,22 +115,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         FunctionType::new(vec![Type::I32, Type::I32], vec![Type::I32]),
         |mut env: FunctionEnvMut<Env>, args: &[Value]| -> Result<Vec<Value>, wasmer::RuntimeError> {
             let ptr = args[0].i32().unwrap_or(0) as u64;
-            let max_len = args[1].i32().unwrap_or(0) as usize;
-            // Block until a line arrives (canonical mode: the terminal
-            // echoes as the user types); pass the newline through so the
-            // kernel's line processing triggers.
-            use std::io::BufRead;
-            let mut line = String::new();
-            let n = std::io::stdin().lock().read_line(&mut line).unwrap_or(0);
+            let _max_len = args[1].i32().unwrap_or(0) as usize;
+            // One raw byte at a time: the kernel's shell echoes and does
+            // the line editing, so the host only forwards keystrokes.
+            let mut byte = [0u8; 1];
+            let n = std::io::stdin().read(&mut byte).unwrap_or(0);
             if n == 0 {
                 return Ok(vec![Value::I32(-1)]); // EOF: kernel exits
             }
-            let bytes = line.as_bytes();
-            let n = bytes.len().min(max_len);
             if let Some(mem) = env.data().memory.lock().unwrap().as_ref() {
-                mem.view(&env).write(ptr, &bytes[..n]).ok();
+                mem.view(&env).write(ptr, &byte[..1]).ok();
             }
-            Ok(vec![Value::I32(n as i32)])
+            Ok(vec![Value::I32(1)])
         },
     );
 
