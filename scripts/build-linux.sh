@@ -24,4 +24,6 @@ echo "==> configuring (wasm_defconfig)..."
 make ARCH=wasm CC="$PWD/../scripts/zig-cc.sh" wasm_defconfig
 echo "==> building vmlinux.wasm (this takes a while)..."
 make ARCH=wasm CC="$PWD/../scripts/zig-cc.sh" -j"$(nproc)" vmlinux.wasm
+echo "==> patching wasm-ld layout (post-link relocator)..."
+bun ../scripts/patch-wasm.ts vmlinux.wasm vmlinux.wasm
 echo "==> done: $(pwd)/vmlinux.wasm"

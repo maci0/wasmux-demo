@@ -37,9 +37,11 @@ prebuilt kernel.
   boot log streams out from the very first `printk`, no late initcall
   required.
 - **Booting is genuinely Linux.** The kernel runs `start_kernel`:
-  memblock setup, the page allocator, SLUB, vmalloc, scheduler
-  initialization, workqueue pools, RCU, IRQ setup, timers, and the
-  clocksource (`clocksource: wasm ...` appears in the log).
+  memblock setup, paging/zones, the page allocator, SLUB, vmalloc, the
+  scheduler, radix trees, housekeeping, and the workqueue pools all
+  initialize (the boot log reaches `workqueue_init_early`). The module
+  is post-processed by `scripts/patch-wasm.ts`, a post-link relocator
+  that repairs wasm-ld's layout defects (see Limitations).
 - **The initramfs is unpacked** by `populate_rootfs()` (the wasm port
   drives initcalls explicitly because wasm-ld cannot lay out the
   `.initcall*.init` sections). The demo ships an in-tree rootfs
@@ -50,13 +52,33 @@ prebuilt kernel.
 
 ## Limitations (be truthful with yourself)
 
-- **The kernel does not complete boot yet.** A memory-corruption bug in
-  the late `start_kernel` path (after scheduler/workqueue/RCU/timer
-  init, around `kmem_cache_init_late`/`console_init`) traps the module
-  before `rest_init()`.  The corruption is layout-dependent (the boot
-  distance varies with code layout) and is the main open problem.  The
-  demo therefore shows the real boot log up to the trap, not a fake
-  success.
+- **The kernel does not complete boot yet.** It traps inside
+  `___slab_alloc()` while `workqueue_init_early()` creates the first
+  system workqueue (the `pool_workqueue` cache allocation): the
+  allocation walks a corrupted partial list. Root cause (diagnosed):
+  wasm-ld lays out the kernel's custom sections badly -
+  zero-initialized statics get addresses that overlap initialized data
+  segments, and an initialized symbol's address can be split from its
+  content. The wasm port now works around this three ways:
+  1. `scripts/patch-wasm.ts` (post-link relocator) moves the late data
+     segments to a safe area and rewrites every reference to them -
+     `i32.const` immediates, load/store memarg offsets (LLVM folds
+     symbol addresses into these, which is the part that used to be
+     missed), data-to-data pointers, and segment offsets;
+  2. boot-critical data that the relocator cannot safely move
+     (`struct memblock`, the memblock region arrays, the pglist_data
+     zone) is defined in early `arch/wasm` objects as initialized data
+     so wasm-ld cannot misplace it;
+  3. the per-cpu pageset is disabled (its statics overlap the boot
+     parameter strings in the wasm-ld layout).
+  With those fixes the kernel boots far past the original failure
+  (which was in `paging_init`) and initializes the whole mm + sched +
+  workqueue early path. The remaining fault is in SLUB's slab
+  accounting: a slab is treated as fully consumed while its objects are
+  still referenced, so its page is handed out again and the live
+  `kmem_cache_node` structs get overwritten. The exact trigger is still
+  under investigation; the demo shows the real boot log up to the trap,
+  not a fake success.
 - **No userspace.** wasm cannot capture its own call stack, so real
   context switches are impossible. `copy_thread()` can only start kernel
   threads, there is no syscall ABI, and `/init` cannot be executed. Even
@@ -85,12 +107,12 @@ prebuilt kernel.
 
 ## Getting the kernel
 
-The prebuilt `vmlinux.wasm` (about 60 MB, most of it debug info) is
-checked into this repository for the demo. To build it yourself:
+The prebuilt `vmlinux.wasm` (about 60 MB) is checked into this repository
+for the demo. To build it yourself:
 
 ```sh
-# needs zig (0.14+) and make
-scripts/build-linux.sh          # clones linux-wasm, builds linux/vmlinux.wasm
+# needs zig (0.14+), make, git, and bun (for the post-link relocator)
+scripts/build-linux.sh          # clones linux-wasm, builds + patches linux/vmlinux.wasm
 ```
 
 ## Running
@@ -131,10 +153,13 @@ cd host/wasmer-host && cargo run --release -- ../../vmlinux.wasm
 
 ## The fork
 
-- `torvalds/linux` v6.19 + two commits:
+- `torvalds/linux` v6.19 + three commits:
   - [`arch: add the wasm (WebAssembly) architecture port`](https://github.com/maci0/linux-wasm/commit/4d0abdd82)
   - [`kernel: make core code build with wasm-ld and zig cc`](https://github.com/maci0/linux-wasm/commit/64dcabcfe)
+  - [`wasm: move boot-critical data to early arch objects`](https://github.com/maci0/linux-wasm/commit/bffc00286)
 - Branch: `wasm`
 - Defconfig: `arch/wasm/configs/wasm_defconfig` (run `make ARCH=wasm
   wasm_defconfig`).
-- Build: `make ARCH=wasm CC=$PWD/scripts/zig-cc.sh vmlinux.wasm`
+- Build: `make ARCH=wasm CC=$PWD/scripts/zig-cc.sh vmlinux.wasm`, then
+  `bun scripts/patch-wasm.ts vmlinux.wasm vmlinux.wasm` (the post-link
+  relocator that repairs the wasm-ld layout overlaps).

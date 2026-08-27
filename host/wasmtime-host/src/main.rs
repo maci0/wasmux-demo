@@ -79,7 +79,13 @@ fn main() -> wasmtime::Result<()> {
 
     match start.call(&mut store, ()) {
         Ok(()) => println!("\n[wasmux] start_kernel returned (unexpected)"),
-        Err(e) => println!("\n[wasmux] kernel trapped: {e}"),
+        Err(e) => {
+            println!("\n[wasmux] kernel trapped: {e}");
+            println!("[wasmux] error debug: {e:?}");
+            if let Some(trap) = e.downcast_ref::<wasmtime::Trap>() {
+                println!("[wasmux] trap code: {:?}", trap.trap_code());
+            }
+        }
     }
     Ok(())
 }
