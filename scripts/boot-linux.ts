@@ -1,5 +1,5 @@
 /**
- * Headless Linux boot test — loads vmlinux.wasm with the wasmux host ABI
+ * Headless Linux boot test: loads vmlinux.wasm with the wasmux host ABI
  * and drives start_kernel to completion, printing the kernel console.
  *
  * Usage: bun run scripts/boot-linux.ts [path/to/vmlinux.wasm]

@@ -1,5 +1,5 @@
 /**
- * wasmux kernel worker — runs vmlinux.wasm in a Web Worker so that a
+ * wasmux kernel worker: runs vmlinux.wasm in a Web Worker so that a
  * kernel fault (or an engine bug triggered by one) cannot take down the
  * page.  The worker owns the wasm instance, provides the wasmux host ABI
  * and streams console output back to the main thread.

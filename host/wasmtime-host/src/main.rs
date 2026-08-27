@@ -1,4 +1,4 @@
-//! wasmux wasmtime host — boots vmlinux.wasm under wasmtime.
+//! wasmux wasmtime host: boots vmlinux.wasm under wasmtime.
 //!
 //! The kernel imports the wasmux host ABI (console, clock, timer, random,
 //! exit) from module "wasmux" and exports start_kernel.  This host

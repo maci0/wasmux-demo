@@ -3,7 +3,7 @@
 #
 # Bundles the webui TypeScript into plain JS, copies the prebuilt
 # vmlinux.wasm and rewrites index.html to reference the bundle.  The
-# result in dist/ is fully static — no server needed.
+# result in dist/ is fully static: no server needed.
 set -e
 cd "$(dirname "$0")/.."
 
@@ -12,8 +12,9 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 
 bun build webui/src/main.ts --outdir "$OUT" --target browser --minify
+bun build webui/src/worker.ts --outdir "$OUT" --format esm --target browser \
+  --entry-naming worker.js
 cp webui/public/index.html "$OUT/index.html"
-cp webui/public/worker.js "$OUT/worker.js"
 cp vmlinux.wasm "$OUT/vmlinux.wasm"
 touch "$OUT/.nojekyll"
 

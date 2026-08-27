@@ -1,5 +1,5 @@
 #!/bin/bash
-# zig-cc kernel wrapper — implements zinux W01/W02 as a shell wrapper.
+# zig-cc kernel wrapper: implements zinux W01/W02 as a shell wrapper.
 # W01: -S + -Wp,-MD → split into two passes (zig cc drops the .s otherwise).
 # W02: suppress spurious "unused -c" warning on -S passes (kernel promotes
 #      it to an error; we already removed those -Werror flags, this is safety).

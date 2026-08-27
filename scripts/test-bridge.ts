@@ -82,7 +82,7 @@ ws.onmessage = (ev) => {
   if (etype === 0x0806) {
     gotArp = true;
     const spa = f.subarray(28, 32);
-    console.log(`<- arp reply from ${spa.join(".")}, mac ${[...f.slice(22, 28)].map(x => x.toString(16)).join(":")}`);
+    console.log(`<- arp reply from ${spa.join(".")}, mac ${Array.from(f.slice(22, 28)).map(x => x.toString(16)).join(":")}`);
   } else if (etype === 0x0800) {
     const proto = f[14 + 9];
     if (proto === 1) {
