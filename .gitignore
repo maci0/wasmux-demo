@@ -2,3 +2,4 @@ dist/
 linux/
 node_modules/
 *.log
+host/*/target/

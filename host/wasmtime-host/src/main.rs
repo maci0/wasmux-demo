@@ -14,6 +14,10 @@ struct Host {
     t0: std::time::Instant,
 }
 
+fn exit_kernel(code: i32) {
+    std::process::exit(code);
+}
+
 fn main() -> wasmtime::Result<()> {
     let path = std::env::args().nth(1).unwrap_or_else(|| "vmlinux.wasm".into());
     let engine = Engine::default();
@@ -67,7 +71,7 @@ fn main() -> wasmtime::Result<()> {
     )?;
 
     linker.func_wrap("wasmux", "wasm_exit", |_: Caller<'_, Host>, code: i32| {
-        std::process::exit(code);
+        exit_kernel(code);
     })?;
 
     let instance = linker.instantiate(&mut store, &module)?;

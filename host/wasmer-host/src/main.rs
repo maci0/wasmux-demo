@@ -7,83 +7,109 @@
 //!
 //! Usage: cargo run --release -- [path/to/vmlinux.wasm]
 
-use std::cell::RefCell;
 use std::io::{Read, Write};
-use std::rc::Rc;
-use wasmer::{imports, Engine, Function, Instance, Module, Store, TypedFunction};
+use std::sync::{Arc, Mutex};
+use wasmer::{
+    AsStoreMut, Function, FunctionEnv, FunctionEnvMut, FunctionType, Instance, Memory, Module,
+    Store, Type, TypedFunction, Value,
+};
 
+#[derive(Clone)]
 struct Env {
-    memory: RefCell<Option<wasmer::Memory>>,
-    t0: std::time::Instant,
+    memory: Arc<Mutex<Option<Memory>>>,
+    t0: Arc<std::time::Instant>,
+}
+
+impl Default for Env {
+    fn default() -> Self {
+        Env {
+            memory: Arc::new(Mutex::new(None)),
+            t0: Arc::new(std::time::Instant::now()),
+        }
+    }
+}
+
+fn exit_kernel(code: i32) {
+    std::process::exit(code);
+}
+
+fn i32pair() -> FunctionType {
+    FunctionType::new(vec![Type::I32, Type::I32], vec![])
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args().nth(1).unwrap_or_else(|| "vmlinux.wasm".into());
-    let engine = Engine::default();
+    let engine = wasmer::Engine::default();
     let module = Module::from_file(&engine, &path)?;
-    let env = Rc::new(Env {
-        memory: RefCell::new(None),
-        t0: std::time::Instant::now(),
-    });
 
-    let mut store = Store::new(&engine, ());
+    let mut store = Store::new(engine);
+    let env = FunctionEnv::new(&mut store, Env::default());
 
-    let env_console = env.clone();
     let console_write = Function::new_with_env(
         &mut store,
-        &env_console,
-        |env: &Env, ptr: i32, len: i32| {
-            let mem = env.memory.borrow();
-            let mem = mem.as_ref().expect("memory not set yet");
-            let view = mem.view::<u8>();
-            let start = ptr as usize;
-            let end = (start + len as usize).min(view.len());
-            let mut out = Vec::with_capacity(end - start);
-            for i in start..end {
-                out.push(view[i].get());
+        &env,
+        i32pair(),
+        |mut env: FunctionEnvMut<Env>, args: &[Value]| -> Result<Vec<Value>, wasmer::RuntimeError> {
+            let ptr = args[0].i32().unwrap_or(0) as u64;
+            let len = args[1].i32().unwrap_or(0) as u64;
+            let mut buf = vec![0u8; len as usize];
+            if let Some(mem) = env.data().memory.lock().unwrap().as_ref() {
+                if mem.view(&env).read(ptr, &mut buf).is_ok() {
+                    std::io::stdout().write_all(&buf).ok();
+                }
             }
-            std::io::stdout().write_all(&out).ok();
+            Ok(vec![])
         },
     );
 
-    let env_time = env.clone();
-    let time_ns = Function::new_with_env(&mut store, &env_time, |env: &Env| -> i64 {
-        env.t0.elapsed().as_nanos() as i64
-    });
+    let time_ns = Function::new_with_env(
+        &mut store,
+        &env,
+        FunctionType::new(vec![], vec![Type::I64]),
+        |env: FunctionEnvMut<Env>, _args: &[Value]| -> Result<Vec<Value>, wasmer::RuntimeError> {
+            Ok(vec![Value::I64(env.data().t0.elapsed().as_nanos() as i64)])
+        },
+    );
 
-    let timer_arm = Function::new_with_env(&mut store, &env, |_env: &Env, _ns: i64| {
-        // one-shot timer; the cooperative kernel runs to completion
-    });
+    let timer_arm = Function::new_with_env(
+        &mut store,
+        &env,
+        FunctionType::new(vec![Type::I64], vec![]),
+        |_env: FunctionEnvMut<Env>, _args: &[Value]| -> Result<Vec<Value>, wasmer::RuntimeError> {
+            // one-shot timer; the cooperative kernel runs to completion
+            Ok(vec![])
+        },
+    );
 
-    let env_random = env.clone();
     let random = Function::new_with_env(
         &mut store,
-        &env_random,
-        |env: &Env, ptr: i32, len: i32| -> i32 {
-            let mut buf = vec![0u8; len as usize];
+        &env,
+        FunctionType::new(vec![Type::I32, Type::I32], vec![Type::I32]),
+        |mut env: FunctionEnvMut<Env>, args: &[Value]| -> Result<Vec<Value>, wasmer::RuntimeError> {
+            let ptr = args[0].i32().unwrap_or(0) as u64;
+            let len = args[1].i32().unwrap_or(0) as usize;
+            let mut buf = vec![0u8; len];
             if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
                 f.read_exact(&mut buf).ok();
             }
-            let mem = env.memory.borrow();
-            if let Some(mem) = mem.as_ref() {
-                let view = mem.view::<u8>();
-                for i in 0..buf.len() {
-                    let off = ptr as usize + i;
-                    if off < view.len() {
-                        view[off].set(buf[i]);
-                    }
-                }
+            if let Some(mem) = env.data().memory.lock().unwrap().as_ref() {
+                mem.view(&env).write(ptr, &buf).ok();
             }
-            len
+            Ok(vec![Value::I32(len as i32)])
         },
     );
 
-    let env_exit = env.clone();
-    let exit = Function::new_with_env(&mut store, &env_exit, |_env: &Env, code: i32| {
-        std::process::exit(code);
-    });
+    let exit = Function::new_with_env(
+        &mut store,
+        &env,
+        FunctionType::new(vec![Type::I32], vec![]),
+        |_env: FunctionEnvMut<Env>, args: &[Value]| -> Result<Vec<Value>, wasmer::RuntimeError> {
+            exit_kernel(args[0].i32().unwrap_or(0));
+            Ok(vec![])
+        },
+    );
 
-    let import_object = imports! {
+    let import_object = wasmer::imports! {
         "wasmux" => {
             "wasm_console_write" => console_write,
             "wasm_time_ns" => time_ns,
@@ -94,10 +120,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let instance = Instance::new(&mut store, &module, &import_object)?;
-    *env.memory.borrow_mut() = Some(instance.exports.get_memory("memory")?.clone());
+    let memory = instance.exports.get_memory("memory")?.clone();
+    env.as_mut(&mut store).memory.lock().unwrap().replace(memory);
 
-    let start: TypedFunction<(), ()> = instance.exports.get_typed_function(&store, "start_kernel")?;
-    match start.call(&mut store) {
+    let start: TypedFunction<(), ()> =
+        instance.exports.get_typed_function::<(), ()>(&store, "start_kernel")?;
+    match start.call_sys(&mut store) {
         Ok(()) => println!("\n[wasmux] start_kernel returned (unexpected)"),
         Err(e) => println!("\n[wasmux] kernel trapped: {e}"),
     }
