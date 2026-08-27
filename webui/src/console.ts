@@ -1,5 +1,5 @@
 /**
- * Terminal console UI component — xterm.js style without xterm.
+ * Terminal console UI component: xterm.js style without xterm.
  * Renders a canvas grid; handles keyboard input.
  */
 export class Console {
@@ -24,7 +24,7 @@ export class Console {
     this.resize();
     this.bindKeys();
     this.buffer = Array(this.rows).fill("");
-    this.print("\nwasmux console ready — type commands\n> ");
+    this.print("\nwasmux console ready, type commands\n> ");
   }
 
   private resize() {
@@ -73,7 +73,7 @@ export class Console {
 
   private putChar(ch: string) {
     if (this.cursor.c >= this.cols) this.newLine();
-    const line = this.buffer[this.cursor.r];
+    const line = this.buffer[this.cursor.r] ?? "";
     this.buffer[this.cursor.r] = line.slice(0, this.cursor.c) + ch + line.slice(this.cursor.c + 1);
     this.cursor.c++;
   }

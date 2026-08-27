@@ -1,8 +1,8 @@
-# wasmux — Linux on wasm32
+# wasmux: Linux on wasm32
 
 Linux 6.19 compiled for a freestanding `wasm32` target and booted inside a
-WebAssembly virtual machine — in a browser tab, under Node.js, or under
-`wasmtime` / `wasmer`.
+WebAssembly virtual machine: in a browser tab, or under bun, wasmtime,
+or wasmer.
 
 The kernel port lives in [`arch/wasm`](https://github.com/maci0/linux-wasm/tree/wasm/arch/wasm)
 on the [`linux-wasm`](https://github.com/maci0/linux-wasm/tree/wasm) fork
@@ -30,11 +30,11 @@ prebuilt kernel.
 ## What works
 
 - **The kernel builds as a single wasm module.** The full Linux tree
-  compiles with `zig cc` (`wasm32-freestanding`) — the port is modeled on
+  compiles with `zig cc` (`wasm32-freestanding`), the port is modeled on
   UML, with a host-OS layer (`arch/wasm/os-wasm/os.c`) implementing the
   UML `os_*` primitives against the wasm host ABI.
 - **Early console.** The console is registered from `setup_arch`, so the
-  boot log streams out from the very first `printk` — no late initcall
+  boot log streams out from the very first `printk`, no late initcall
   required.
 - **Booting is genuinely Linux.** The kernel runs `start_kernel`:
   memblock setup, the page allocator, SLUB, vmalloc, scheduler
@@ -45,8 +45,8 @@ prebuilt kernel.
   `.initcall*.init` sections). The demo ships an in-tree rootfs
   (`usr/wasm_rootfs` on the fork).
 - **Runs on several engines**: the same `vmlinux.wasm` boots under the
-  browser webui, the Node/Bun harness, a wasmtime host, and a wasmer
-  host — see `host/`.
+  browser webui, the bun harness, a wasmtime host, and a wasmer
+  host, see `host/`.
 
 ## Limitations (be truthful with yourself)
 
@@ -55,7 +55,7 @@ prebuilt kernel.
   init, around `kmem_cache_init_late`/`console_init`) traps the module
   before `rest_init()`.  The corruption is layout-dependent (the boot
   distance varies with code layout) and is the main open problem.  The
-  demo therefore shows the real boot log up to the trap — not a fake
+  demo therefore shows the real boot log up to the trap, not a fake
   success.
 - **No userspace.** wasm cannot capture its own call stack, so real
   context switches are impossible. `copy_thread()` can only start kernel
@@ -75,7 +75,7 @@ prebuilt kernel.
   - the 32-bit `jiffies` alias is defined in `arch/wasm/kernel/jiffies.c`
     (the linker cannot alias it to `jiffies_64`).
 - **The network device** (`CONFIG_WASM_NET`) compiles but nothing
-  configures an address — there is no user to run `ip`.
+  configures an address, there is no user to run `ip`.
 - **`__builtin_return_address()` is unavailable** on the wasm backend, so
   a handful of core call sites use `_RET_IP_` instead (identical on
   every other architecture).
@@ -122,12 +122,12 @@ cd host/wasmer-host && cargo run --release -- ../../vmlinux.wasm
 
 ## Layout
 
-- `webui/` — browser runtime: kernel loader (`kernel.ts`), console
+- `webui/`: browser runtime: kernel loader (`kernel.ts`), console
   (`console.ts`), page, dev server.
-- `scripts/` — kernel build, demo build, headless boot harness, `zig cc`
+- `scripts/`: kernel build, demo build, headless boot harness, `zig cc`
   wrapper.
-- `host/` — native wasmtime and wasmer hosts.
-- `vmlinux.wasm` — prebuilt kernel (from the linux-wasm fork).
+- `host/`: native wasmtime and wasmer hosts.
+- `vmlinux.wasm`: prebuilt kernel (from the linux-wasm fork).
 
 ## The fork
 

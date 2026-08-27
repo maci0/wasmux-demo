@@ -11,12 +11,29 @@ const DIR = import.meta.dir;
 const PUB = `${DIR}/public`;
 const KERNEL_CANDIDATES = [`${DIR}/../vmlinux.wasm`, `${DIR}/../linux/vmlinux.wasm`];
 
-interface Link { forward(d: Uint8Array): void; close(): void; }
+let workerBundlePromise: Promise<Uint8Array<ArrayBuffer>> | null = null;
+
+function workerBundle(): Promise<Uint8Array<ArrayBuffer>> {
+  const promise = workerBundlePromise ?? Bun.build({
+    entrypoints: [`${DIR}/src/worker.ts`],
+    format: "esm",
+    target: "browser",
+  }).then(async (r) => {
+    const out = r.outputs[0];
+    if (!out) throw new Error("worker bundle produced no output");
+    return new Uint8Array(await out.arrayBuffer() as ArrayBuffer);
+  });
+  workerBundlePromise = promise;
+  return promise;
+}
+
+interface Link { forward(d: Uint8Array<ArrayBuffer>): void; close(): void; }
+interface WsData { link?: Link }
 
 function proxyToBridge(browserWs: { send(d: Uint8Array): void; close(): void }): Link {
   const upstream = new WebSocket(BRIDGE);
   upstream.binaryType = "arraybuffer";
-  const pending: Uint8Array[] = [];
+  const pending: Uint8Array<ArrayBuffer>[] = [];
   let open = false;
   upstream.onopen = () => {
     console.log("bridge link up");
@@ -36,7 +53,7 @@ function proxyToBridge(browserWs: { send(d: Uint8Array): void; close(): void }):
   };
 }
 
-Bun.serve({
+Bun.serve<WsData>({
   port: PORT,
   async fetch(req, server) {
     const url = new URL(req.url);
@@ -50,14 +67,20 @@ Bun.serve({
       for (const p of KERNEL_CANDIDATES) {
         const f = Bun.file(p);
         if (await f.exists())
-          return new Response(f, { headers: { "content-type": "application/wasm" } });
+          return new Response(f.stream(), { headers: { "content-type": "application/wasm" } });
       }
       return new Response("kernel not built", { status: 404 });
     }
 
+    if (url.pathname === "/worker.js") {
+      return new Response(await workerBundle(), {
+        headers: { "content-type": "text/javascript" },
+      });
+    }
+
     const path = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = Bun.file(`${PUB}${path}`);
-    if (await file.exists()) return new Response(file);
+    if (await file.exists()) return new Response(file.stream());
 
     // bun dev-style TS transform for /src/*.ts
     if (path.startsWith("/src/") && path.endsWith(".ts")) {
@@ -73,14 +96,14 @@ Bun.serve({
   },
   websocket: {
     open(ws) {
-      ws.data.link = proxyToBridge(ws as any);
+      ws.data.link = proxyToBridge(ws);
     },
     message(ws, msg) {
       if (typeof msg !== "string" && ws.data?.link)
-        (ws.data.link as Link).forward(new Uint8Array(msg));
+        ws.data.link.forward(new Uint8Array(msg));
     },
     close(ws) {
-      (ws.data?.link as Link | undefined)?.close();
+      ws.data?.link?.close();
     },
   },
 });

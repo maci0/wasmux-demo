@@ -1,5 +1,5 @@
 /**
- * wasmux Linux runtime — loads vmlinux.wasm and provides the wasm host ABI
+ * wasmux Linux runtime: loads vmlinux.wasm and provides the wasm host ABI
  * (module "wasmux", falling back to "env") defined in
  * linux/arch/wasm/include/shared/os-wasm.h:
  *
@@ -74,42 +74,41 @@ export class LinuxKernel {
     return new Uint8Array(this.memory.buffer);
   }
 
-  private buildImports(): WebAssembly.Imports {
-    const self = this;
+  private buildImports(): WebAssembly.ModuleImports {
     return {
-      wasm_console_write(ptr: number, len: number) {
-        self.cb.onConsole(new TextDecoder().decode(self.bytes().subarray(ptr, ptr + len)));
+      wasm_console_write: (ptr: number, len: number) => {
+        this.cb.onConsole(new TextDecoder().decode(this.bytes().subarray(ptr, ptr + len)));
       },
-      wasm_net_send(ptr: number, len: number) {
-        self.cb.onFrame?.(self.bytes().slice(ptr, ptr + len));
+      wasm_net_send: (ptr: number, len: number) => {
+        this.cb.onFrame?.(this.bytes().slice(ptr, ptr + len));
       },
-      wasm_net_recv(ptr: number, maxLen: number): number {
-        const frame = self.frames.shift();
+      wasm_net_recv: (ptr: number, maxLen: number): number => {
+        const frame = this.frames.shift();
         if (!frame) return 0;
         const n = Math.min(frame.length, maxLen);
-        self.bytes().set(frame.subarray(0, n), ptr);
+        this.bytes().set(frame.subarray(0, n), ptr);
         return n;
       },
-      wasm_exit(code: number) {
-        self.cb.onExit?.(code);
+      wasm_exit: (code: number) => {
+        this.cb.onExit?.(code);
         throw new KernelExit(code);
       },
-      wasm_time_ms(): bigint {
-        return BigInt(Math.floor(self.cb.getTimeMs()));
+      wasm_time_ms: (): bigint => {
+        return BigInt(Math.floor(this.cb.getTimeMs()));
       },
-      wasm_time_ns(): bigint {
-        return BigInt(Math.floor(self.cb.getTimeMs() * 1e6));
+      wasm_time_ns: (): bigint => {
+        return BigInt(Math.floor(this.cb.getTimeMs() * 1e6));
       },
-      wasm_timer_arm(_ns: bigint) {
+      wasm_timer_arm: (_ns: bigint) => {
         // One-shot timer: with a cooperative kernel the runtime cannot
         // preempt an in-flight start_kernel() call, so ticks are dropped
         // until the kernel yields.  The boot path does not depend on them
         // (loops_per_jiffy is preset via the lpj= command line).
       },
-      wasm_random(ptr: number, len: number): number {
-        const dst = self.bytes().subarray(ptr, ptr + len);
+      wasm_random: (ptr: number, len: number): number => {
+        const dst = this.bytes().subarray(ptr, ptr + len);
         if (typeof crypto !== "undefined" && crypto.getRandomValues) {
-          crypto.getRandomValues(dst as unknown as Uint8Array);
+          crypto.getRandomValues(dst);
         } else {
           for (let i = 0; i < len; i++) dst[i] = (Math.random() * 256) | 0;
         }
