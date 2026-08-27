@@ -18,7 +18,7 @@ let worker: Worker | null = null;
 
 function spawnKernelWorker(bytes: ArrayBuffer): Promise<void> {
   return new Promise((resolve, reject) => {
-    worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+    worker = new Worker("worker.js", { type: "module" });
     worker.onmessage = (ev: MessageEvent) => {
       const m = ev.data;
       if (m.type === "console") term.print(m.text);

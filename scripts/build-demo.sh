@@ -13,6 +13,7 @@ mkdir -p "$OUT"
 
 bun build webui/src/main.ts --outdir "$OUT" --target browser --minify
 cp webui/public/index.html "$OUT/index.html"
+cp webui/public/worker.js "$OUT/worker.js"
 cp vmlinux.wasm "$OUT/vmlinux.wasm"
 touch "$OUT/.nojekyll"
 
