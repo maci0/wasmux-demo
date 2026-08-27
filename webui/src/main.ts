@@ -62,7 +62,9 @@ async function main() {
   let bytes: ArrayBuffer | null = null;
   for (const url of kernelUrls) {
     try {
-      bytes = await (await fetch(url)).arrayBuffer();
+      const res = await fetch(url);
+      if (!res.ok) continue; // e.g. /kernel.wasm 404s on static GH Pages
+      bytes = await res.arrayBuffer();
       if (bytes.byteLength > 0) break;
     } catch { /* try next */ }
   }
