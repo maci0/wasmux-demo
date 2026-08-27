@@ -25,8 +25,8 @@ export class Console {
     this.canvas = document.createElement("canvas");
     this.canvas.style.cssText = "background:#1a1a2e;color:#e0e0e0;font-family:monospace;display:block;";
     this.ctx = this.canvas.getContext("2d")!;
-    this.resize();
     parent.appendChild(this.canvas);
+    this.resize();
     this.bindKeys();
     this.buffer = Array(this.rows).fill("");
   }
