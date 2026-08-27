@@ -9,7 +9,33 @@ const PORT = Number(process.env.WEBUI_PORT ?? 3000);
 // Resolve everything relative to this file, not the process CWD.
 const DIR = import.meta.dir;
 const PUB = `${DIR}/public`;
-const KERNEL_CANDIDATES = [`${DIR}/../vmlinux.wasm`, `${DIR}/../linux/vmlinux.wasm`];
+const KERNEL_SRC = `${DIR}/../vmlinux.wasm`;
+const KERNEL_OUT = `${DIR}/build/vmlinux.wasm`;
+
+// The kernel must be patched before it runs (see scripts/patch-wasm.ts).
+// Patch it once at startup so the dev server serves a bootable module.
+async function ensurePatchedKernel(): Promise<string | null> {
+  const src = Bun.file(KERNEL_SRC);
+  if (!(await src.exists())) return null;
+  const out = Bun.file(KERNEL_OUT);
+  let need = true;
+  if (await out.exists()) {
+    const [s, o] = [src.lastModified, out.lastModified];
+    need = o < s;
+  }
+  if (need) {
+    const p = Bun.spawnSync(["bun", `${DIR}/../scripts/patch-wasm.ts`, KERNEL_SRC, KERNEL_OUT]);
+    if (p.exitCode !== 0) {
+      console.error("kernel patch failed:", new TextDecoder().decode(p.stderr));
+      return null;
+    }
+  }
+  return KERNEL_OUT;
+}
+
+const patchedKernel = await ensurePatchedKernel();
+if (patchedKernel) console.log(`serving patched kernel from ${patchedKernel}`);
+else console.error("warning: no patched kernel available (run the build first)");
 
 let workerBundlePromise: Promise<Uint8Array<ArrayBuffer>> | null = null;
 
@@ -64,11 +90,10 @@ Bun.serve<WsData>({
     }
 
     if (url.pathname === "/kernel.wasm" || url.pathname === "/vmlinux.wasm") {
-      for (const p of KERNEL_CANDIDATES) {
-        const f = Bun.file(p);
-        if (await f.exists())
-          return new Response(f.stream(), { headers: { "content-type": "application/wasm" } });
-      }
+      if (!patchedKernel) return new Response("kernel not built", { status: 404 });
+      const f = Bun.file(patchedKernel);
+      if (await f.exists())
+        return new Response(f.stream(), { headers: { "content-type": "application/wasm" } });
       return new Response("kernel not built", { status: 404 });
     }
 
