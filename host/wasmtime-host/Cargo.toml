@@ -1,0 +1,8 @@
+[package]
+name = "wasmux-wasmtime"
+version = "0.1.0"
+edition = "2021"
+description = "Run vmlinux.wasm (Linux 6.19 on wasm32) under wasmtime"
+
+[dependencies]
+wasmtime = "48"

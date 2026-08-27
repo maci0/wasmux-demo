@@ -1,0 +1,12 @@
+{
+  "name": "webui",
+  "module": "index.ts",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "private": true,
+  "type": "module"
+}

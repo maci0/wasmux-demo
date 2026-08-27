@@ -1,0 +1,4 @@
+dist/
+linux/
+node_modules/
+*.log
