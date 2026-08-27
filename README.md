@@ -29,6 +29,10 @@ Web Worker), native hosts, the build tooling, and the prebuilt kernel.
 
 ## What works (verified)
 
+For the complete, itemized inventory of features and gaps see
+[`docs/FEATURES-AND-GAPS.md`](docs/FEATURES-AND-GAPS.md).  The short
+version:
+
 - **The kernel fully boots.** `start_kernel()` runs the real boot path:
   early console, memblock, paging/zones, page allocator, SLUB, vmalloc,
   the scheduler, the VFS, the built-in initramfs (unpacked by the real
