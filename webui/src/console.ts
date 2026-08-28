@@ -50,6 +50,23 @@ export class Console {
 
   private bindKeys() {
     window.addEventListener("keydown", (e) => {
+      // Ctrl combos go to the kernel as control chars (^C cancel, ^D EOF,
+      // ^L clear); everything else printable is forwarded as-is.
+      if (e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C")) {
+        e.preventDefault();
+        this.onKey("\x03");
+        return;
+      }
+      if (e.ctrlKey && !e.metaKey && (e.key === "d" || e.key === "D")) {
+        e.preventDefault();
+        this.onKey("\x04");
+        return;
+      }
+      if (e.ctrlKey && !e.metaKey && (e.key === "l" || e.key === "L")) {
+        e.preventDefault();
+        this.onKey("\x0c");
+        return;
+      }
       if (e.key === "Enter") {
         e.preventDefault();
         this.onKey("\n");
