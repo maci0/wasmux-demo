@@ -9,6 +9,15 @@ import { Console } from "./console.ts";
 
 const out = document.getElementById("out")!;
 const status = document.getElementById("status")!;
+const led = document.getElementById("led")!;
+const screenWrap = document.getElementById("screenWrap")!;
+
+/** Drive the front-panel LED + status line from the kernel state. */
+function setPanel(state: "off" | "booting" | "ready" | "error", text: string) {
+  led.className = "led" + (state === "off" ? "" : ` ${state}`);
+  status.className = state === "ready" ? "ready" : state === "error" ? "error" : "";
+  status.textContent = text;
+}
 
 // --- console ----------------------------------------------------------------
 
@@ -26,19 +35,19 @@ function spawnKernelWorker(bytes: ArrayBuffer): Promise<void> {
       const m = ev.data;
       if (m.type === "console") term.print(m.text);
       else if (m.type === "shell") {
-        status.textContent = "shell ready — type commands";
+        setPanel("ready", "shell ready — type commands");
         resolve();
       } else if (m.type === "exit") {
         term.print(`\n[wasmux: kernel exited with code ${m.code}]\n`);
-        status.textContent = `kernel exited (${m.code})`;
+        setPanel("off", `kernel exited (${m.code})`);
       } else if (m.type === "trap") {
         term.print(`\n[kernel fault: ${m.error}]\n`);
-        status.textContent = "kernel faulted (page kept alive by worker)";
+        setPanel("error", "kernel faulted");
         resolve();
       }
     };
     worker.onerror = (e) => {
-      status.textContent = "kernel worker crashed";
+      setPanel("error", "kernel worker crashed");
       term.print(`\n[kernel worker crashed: ${e.message}]\n`);
       reject(new Error("worker crashed"));
     };
@@ -54,7 +63,7 @@ function spawnKernelWorker(bytes: ArrayBuffer): Promise<void> {
 // --- boot -------------------------------------------------------------------
 
 async function main() {
-  status.textContent = "loading vmlinux.wasm…";
+  setPanel("booting", "loading vmlinux.wasm…");
 
   // Dev server exposes the kernel at /kernel.wasm; the static GH Pages
   // build ships it next to the bundle as ./vmlinux.wasm.
@@ -69,12 +78,13 @@ async function main() {
     } catch { /* try next */ }
   }
   if (!bytes) {
-    status.textContent = "kernel: load error";
+    setPanel("error", "kernel load error");
     term.print("failed to fetch the kernel image (tried /kernel.wasm, ./vmlinux.wasm)\n");
     return;
   }
 
-  status.textContent = "booting kernel…";
+  setPanel("booting", "booting kernel…");
+  screenWrap.classList.add("warming"); // the one authored power-on moment
   try {
     await spawnKernelWorker(bytes);
   } catch {

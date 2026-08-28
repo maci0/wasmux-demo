@@ -1,52 +1,201 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>wasmux: Linux on wasm32</title>
+<title>wasmux — Linux 7.2.1 booting in your browser</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23101113'/%3E%3Cpath d='M9 9l7 7-7 7' stroke='%23ffb454' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M18 23h5' stroke='%237fd962' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --graphite-0: #0c0d0f;   /* page ground */
+    --graphite-1: #101113;   /* screen well */
+    --graphite-2: #17181b;   /* chassis */
+    --graphite-3: #1d1f23;   /* raised */
+    --hairline:   #2a2d33;
+    --amber:      #ffb454;   /* phosphor */
+    --amber-dim:  #8a6d3a;
+    --green:      #7fd962;   /* ready */
+    --red:        #ff5f56;   /* fault */
+    --text:       #c8ccd4;
+    --text-dim:   #8f95a0;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
   body {
-    background: #0d1117; color: #e6edf3;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--graphite-0);
+    color: var(--text);
+    font-family: var(--mono);
     display: flex; flex-direction: column;
+    -webkit-font-smoothing: antialiased;
   }
+  a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--hairline); transition: color .15s ease-out, border-color .15s ease-out; }
+  a:hover { color: var(--amber); border-color: var(--amber-dim); }
+
+  /* ---------- hero / front panel ---------- */
   header {
-    display: flex; align-items: baseline; justify-content: space-between;
-    padding: 12px 20px; border-bottom: 1px solid #21262d;
-    background: #161b22;
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+    padding: 34px 40px 26px;
+    border-bottom: 1px solid var(--hairline);
+    background:
+      linear-gradient(180deg, var(--graphite-2), var(--graphite-1));
   }
-  header h1 { font-size: 15px; font-weight: 600; color: #58a6ff; }
-  header h1 span { color: #8b949e; font-weight: 400; }
-  #status { font-size: 12px; color: #3fb950; }
-  #status.err { color: #f85149; }
-  main { flex: 1; display: flex; flex-direction: column; }
-  #out {
-    flex: 1; overflow: hidden; background: #010409;
-    border-bottom: 1px solid #21262d;
+  .wordmark h1 {
+    font-family: var(--display);
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: #e8ebf0;
   }
+  .wordmark h1 .dot { color: var(--amber); }
+  .claim {
+    margin-top: 10px;
+    max-width: 46ch;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: var(--text-dim);
+  }
+  .claim strong { color: var(--text); font-weight: 500; }
+
+  .panel { display: flex; align-items: center; gap: 12px; padding-bottom: 6px; }
+  .led {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--graphite-3);
+    border: 1px solid rgba(0,0,0,.55);
+    box-shadow: inset 0 0 2px rgba(0,0,0,.7);
+    transition: background .3s ease-out, box-shadow .3s ease-out;
+  }
+  .led.booting {
+    background: var(--amber);
+    box-shadow: inset 0 0 2px rgba(0,0,0,.35), 0 0 6px rgba(255,180,84,.4);
+    animation: led-pulse 1.1s ease-in-out infinite;
+  }
+  .led.ready { background: var(--green); box-shadow: inset 0 0 2px rgba(0,0,0,.35), 0 0 6px rgba(127,217,98,.35); }
+  .led.error  { background: var(--red);   box-shadow: inset 0 0 2px rgba(0,0,0,.35), 0 0 6px rgba(255,95,86,.35); }
+  @keyframes led-pulse { 50% { opacity: .45; } }
+  #status {
+    font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  #status.ready { color: var(--green); }
+  #status.error { color: var(--red); }
+
+  /* ---------- terminal instrument ---------- */
+  .stage {
+    flex: 1; display: flex; align-items: stretch;
+    padding: 26px 40px 30px;
+    background:
+      radial-gradient(120% 140% at 50% 0%, #131417 0%, var(--graphite-0) 70%);
+  }
+  .bezel {
+    flex: 1; display: flex; flex-direction: column;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: var(--graphite-2);
+    box-shadow: 0 18px 50px rgba(0,0,0,.5), 0 2px 4px rgba(0,0,0,.4);
+    overflow: hidden;
+  }
+  .bezel-top {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--graphite-3);
+  }
+  .bezel-label {
+    font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .bezel-label .accent { color: var(--amber); }
+
+  .screen-wrap { position: relative; flex: 1; min-height: 0; }
+  #out { position: absolute; inset: 0; background: var(--graphite-1); }
   #out canvas { display: block; width: 100%; height: 100%; }
-  footer {
-    padding: 8px 20px; font-size: 11px; color: #8b949e;
-    border-top: 1px solid #21262d; background: #161b22;
-    display: flex; gap: 16px;
+
+  /* CRT: fine scanlines + soft vignette — the terminal is a real screen,
+     so the texture is earned, not decoration. */
+  .scanlines {
+    position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,.14) 3px);
+    mix-blend-mode: multiply;
   }
-  footer a { color: #58a6ff; text-decoration: none; }
-  footer a:hover { text-decoration: underline; }
+  .vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(115% 115% at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,.34) 100%);
+  }
+
+  /* power-on: one authored moment — the screen warms from darkness */
+  .screen-wrap.warming { animation: power-on 1.15s cubic-bezier(.16,1,.3,1) both; }
+  @keyframes power-on {
+    0%   { filter: brightness(0.12) blur(3px); }
+    55%  { filter: brightness(0.5) blur(0.6px); }
+    100% { filter: brightness(1) blur(0); }
+  }
+
+  /* ---------- spec plate ---------- */
+  footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+    padding: 16px 40px;
+    border-top: 1px solid var(--hairline);
+    background: var(--graphite-2);
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+  }
+  .spec { display: flex; gap: 28px; flex-wrap: wrap; }
+  .spec b { color: var(--text); font-weight: 500; }
+  .links { display: flex; gap: 18px; }
+
+  @media (max-width: 760px) {
+    header { flex-direction: column; align-items: flex-start; padding: 24px 20px 20px; }
+    .stage { padding: 18px 12px 22px; }
+    footer { flex-direction: column; align-items: flex-start; padding: 14px 20px; }
+    .spec { gap: 10px 20px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>wasmux <span>: Linux 6.19 booting as a WebAssembly module</span></h1>
-  <div id="status">booting…</div>
+  <div class="wordmark">
+    <h1>wasmux<span class="dot">.</span></h1>
+    <p class="claim"><strong>Linux 7.2.1</strong> — the kernel itself is the WebAssembly module. It boots to a shell inside this tab, no emulator between you and <strong>start_kernel()</strong>.</p>
+  </div>
+  <div class="panel">
+    <div class="led" id="led" aria-hidden="true"></div>
+    <div id="status" role="status">power on</div>
+  </div>
 </header>
-<main id="out"></main>
+<main class="stage">
+  <div class="bezel">
+    <div class="bezel-top">
+      <span class="bezel-label"><span class="accent">TTY0</span> · kernel console</span>
+      <span class="bezel-label">wasm32 · freestanding</span>
+    </div>
+    <div class="screen-wrap" id="screenWrap">
+      <div id="out"><noscript>This demo needs JavaScript to instantiate the kernel.</noscript></div>
+      <div class="scanlines" aria-hidden="true"></div>
+      <div class="vignette" aria-hidden="true"></div>
+    </div>
+  </div>
+</main>
 <footer>
-  <span>kernel: linux-wasm @ v6.19 (arch/wasm)</span>
-  <a href="https://github.com/maci0/linux-wasm/tree/wasm" target="_blank" rel="noopener">fork</a>
-  <a href="https://github.com/maci0/wasmux-demo" target="_blank" rel="noopener">runtime</a>
-  <span>single-threaded · cooperative · kernel-resident shell (no userspace)</span>
+  <div class="spec">
+    <span>kernel <b>linux-wasm @ v7.2.1</b> · arch/wasm</span>
+    <span>engines <b>browser · wasmtime · wasmer · bun</b></span>
+    <span>single-threaded · cooperative · <b>kernel-resident shell</b> (no userspace)</span>
+  </div>
+  <div class="links">
+    <a href="https://github.com/maci0/linux-wasm/tree/wasm-7.2" target="_blank" rel="noopener">kernel fork</a>
+    <a href="https://github.com/maci0/wasmux-demo" target="_blank" rel="noopener">runtime</a>
+  </div>
 </footer>
 <script type="module" src="/src/main.ts"></script>
 </body>

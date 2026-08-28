@@ -17,6 +17,7 @@ export class Console {
   private buffer: string[] = [];
   private cursor = { r: 0, c: 0 };
   private scrollback = 0;
+  private cursorOn = true;
   /** Forwarded to the kernel: "\n" on Enter, "\x7f" on Backspace,
    *  otherwise the printable character.  The kernel owns the echo. */
   private onKey: (key: string) => void;
@@ -24,12 +25,17 @@ export class Console {
   constructor(parent: HTMLElement, onKey: (key: string) => void) {
     this.onKey = onKey;
     this.canvas = document.createElement("canvas");
-    this.canvas.style.cssText = "background:#1a1a2e;color:#e0e0e0;font-family:monospace;display:block;";
+    this.canvas.style.cssText = "background:#101113;color:#ffb454;font-family:'IBM Plex Mono',ui-monospace,monospace;display:block;";
     this.ctx = this.canvas.getContext("2d")!;
     parent.appendChild(this.canvas);
     this.resize();
     this.bindKeys();
     this.buffer = Array(this.rows).fill("");
+    // blink the shell cursor once the terminal is up
+    setInterval(() => {
+      this.cursorOn = !this.cursorOn;
+      this.redraw();
+    }, 530);
   }
 
   private resize() {
@@ -125,22 +131,24 @@ export class Console {
   }
 
   redraw() {
-    this.ctx.fillStyle = "#1a1a2e";
+    this.ctx.fillStyle = "#101113";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.font = `${this.fontH}px monospace`;
-    this.ctx.fillStyle = "#e0e0e0";
+    this.ctx.font = `${this.fontH}px 'IBM Plex Mono', monospace`;
+    this.ctx.fillStyle = "#ffb454";
     const start = Math.max(0, this.buffer.length - this.rows);
     for (let i = 0; i < this.rows; i++) {
       const line = this.buffer[start + i] || "";
       this.ctx.fillText(line, 2, (i + 1) * this.fontH - 2);
     }
-    // cursor
-    const cr = this.cursor.r - start;
-    if (cr >= 0 && cr < this.rows) {
-      const cx = 2 + this.cursor.c * this.fontW;
-      const cy = (cr + 1) * this.fontH - 2;
-      this.ctx.fillStyle = "#fff";
-      this.ctx.fillRect(cx, cy - this.fontH + 2, this.fontW, this.fontH - 2);
+    // cursor (blinks)
+    if (this.cursorOn) {
+      const cr = this.cursor.r - start;
+      if (cr >= 0 && cr < this.rows) {
+        const cx = 2 + this.cursor.c * this.fontW;
+        const cy = (cr + 1) * this.fontH - 2;
+        this.ctx.fillStyle = "#ffb454";
+        this.ctx.fillRect(cx, cy - this.fontH + 2, this.fontW, this.fontH - 2);
+      }
     }
   }
 }
