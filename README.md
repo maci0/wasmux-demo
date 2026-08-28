@@ -1,6 +1,6 @@
 # wasmux: Linux booting to a shell on wasm32
 
-Linux 6.19 compiled for a freestanding `wasm32` target, booted inside a
+Linux 7.2.1 compiled for a freestanding `wasm32` target, booted inside a
 WebAssembly virtual machine, and driven to an **interactive shell** — in a
 browser tab, or under bun, wasmtime, or wasmer.
 
@@ -11,7 +11,7 @@ Web Worker), native hosts, the build tooling, and the prebuilt kernel.
 
 ```
 ┌────────────────────────────────────────────────┐
-│  vmlinux.wasm  (Linux 6.19, wasm32 module)     │
+│  vmlinux.wasm  (Linux 7.2.1, wasm32 module)     │
 │  imports (module "wasmux"):                    │
 │    wasm_console_write   wasm_time_ns           │
 │    wasm_timer_arm       wasm_random            │

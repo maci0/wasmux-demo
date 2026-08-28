@@ -1,13 +1,13 @@
 # wasmux: features and gaps (complete audit)
 
-This is the full, honest inventory of what the wasmux port of Linux 6.19
+This is the full, honest inventory of what the wasmux port of Linux 7.2.1
 does and does not do.  "Verified" means exercised at boot or in a shell
 session; "port decision" means an intentional choice for the target;
 "platform limit" means wasm32/WebAssembly physically cannot do it.
 
 Audit basis: the `wasm` branch of
 [maci0/linux-wasm](https://github.com/maci0/linux-wasm/tree/wasm)
-(4 commits on top of v6.19), the webui and hosts in this repository, and
+(4 commits on top of v7.2.1), the webui and hosts in this repository, and
 the boot log / shell session produced by the live demo.
 
 ---

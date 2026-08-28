@@ -1,9 +1,9 @@
 #!/bin/sh
-# Build vmlinux.wasm (Linux 6.19 with the wasm architecture port).
+# Build vmlinux.wasm (Linux 7.2.1 with the wasm architecture port).
 #
 # The kernel source comes from the linux-wasm fork (branch "wasm"):
 #   https://github.com/maci0/linux-wasm
-# which is torvalds/linux v6.19 plus the arch/wasm patchset.
+# which is torvalds/linux v7.2.1 plus the arch/wasm patchset.
 #
 # Requires: zig (0.14+), make, git
 # Output:   linux/vmlinux.wasm
@@ -12,7 +12,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 FORK_URL=https://github.com/maci0/linux-wasm.git
-BRANCH=wasm
+BRANCH=wasm-7.2
 
 if [ ! -d linux/.git ]; then
   echo "==> cloning linux-wasm (branch $BRANCH)..."

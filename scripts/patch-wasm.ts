@@ -24,7 +24,7 @@
  * Usage: bun patch-wasm.ts <in.wasm> <out.wasm>
  */
 
-const CUTOFF = 0x1b0bd0; // first late segment (the .init.data chunk)
+const CUTOFF = 0x1b44ac; // first late segment (the .init.data chunk) [7.2.1 layout]
 const NEW_BASE = 0x00200000; // safe area: above the kernel image data, below RAM
 
 // A reference into the moved range is only remapped when its target holds
